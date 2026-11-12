@@ -55,14 +55,20 @@ If Godot asks to upgrade or convert the project to a newer version, say yes.
 | Left click (hold) | Place block (or supply pile) |
 | Right click (hold) | Remove block. Right click a supply pile to pack it up. |
 | 1 / 2 | Select rough log block / supply pile |
+| R | Cycle build shape: Single, Line, Wall, Floor |
+| Ctrl + mouse wheel | Wall height |
 
-In bird's-eye view: **WASD** pans, **Shift** pans faster, **Q / E** rotate, **mouse wheel** zooms, and the mouse aims.
+With Line, Wall or Floor: click and drag from start to end, then release to build the whole shape.
+Right-drag removes in the same shape. Press the other mouse button mid-drag to cancel.
+
+In bird's-eye view: **WASD** or **middle-mouse drag** pans, **Shift + middle-mouse drag** rotates and tilts,
+**Q / E** rotate, the **mouse wheel** zooms towards the cursor, and the mouse aims.
 
 ## How building works
 
-1. Chop trees and stack the logs on the log stack.
+1. Chop trees. Delivering a fresh log to the log stack *or* a supply pile earns Forestry points.
 2. In build mode, press **2** and place a **supply pile** where you want to build.
-3. Take logs from the log stack (E with empty hands) and carry them to the supply pile (E).
+3. Carry logs to the supply pile (E), either straight from the forest or taken from the log stack (E with empty hands).
    Each log becomes **10 blocks** of build supplies.
 4. Press **1** and build. Blocks within 12 m of a supply pile use its supplies.
    Removing a block puts its wood back on the pile.

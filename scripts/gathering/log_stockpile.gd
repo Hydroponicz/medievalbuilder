@@ -1,6 +1,7 @@
 extends StaticBody3D
-## A simple log stack. Carry logs here and press E to stack them neatly.
-## Stacked logs are your stored wood, and stacking them earns Forestry points.
+## A simple log stack: storage for logs. Carry logs here and press E to stack them neatly,
+## or press E with empty hands to take logs off it.
+## Delivering a freshly chopped log here (or to a supply pile) earns Forestry points.
 
 signal stored_changed(count: int, capacity: int)
 
@@ -30,48 +31,56 @@ func _ready() -> void:
 func get_interaction_prompt(player) -> String:
 	if player.is_carrying():
 		if stored < capacity:
-			return "[E] Stack log   (%d / %d)" % [stored, capacity]
+			var count := mini(player.carried_count(), capacity - stored)
+			return "[E] Stack %s   (%d / %d)" % [_logs_text(count), stored, capacity]
 		return "Log stack is full   (%d / %d)" % [stored, capacity]
 	if stored > 0:
-		return "[E] Take log   (%d / %d)" % [stored, capacity]
+		var count := mini(player.max_carry, stored)
+		return "[E] Take %s   (%d / %d)" % [_logs_text(count), stored, capacity]
 	return "Log stack is empty   (0 / %d)" % capacity
 
 
 func interact(player) -> void:
 	if player.is_carrying():
-		_stack_log(player)
-	elif stored > 0:
-		_take_log(player)
+		_stack_carried_logs(player)
+	else:
+		_take_logs(player)
 
 
-func _stack_log(player) -> void:
-	if stored >= capacity:
-		return
-	var item = player.take_carried()
-	# Only fresh logs earn points, so taking a log out and putting it back isn't a points trick.
-	var is_fresh: bool = not item.from_stack
-	item.queue_free()
-
-	_add_log_visual(stored, true)
-	stored += 1
-	if is_fresh:
-		Progression.add_points(Progression.FORESTRY, points_per_log, "Log stacked")
+## Stacks every log the player is carrying (as many as fit).
+func _stack_carried_logs(player) -> void:
+	var fresh := 0
+	while player.is_carrying() and stored < capacity:
+		var item = player.take_carried()
+		if not item.counted:
+			fresh += 1
+		item.queue_free()
+		_add_log_visual(stored, true)
+		stored += 1
+	# Only freshly chopped logs earn points, so moving logs around isn't a points trick.
+	if fresh > 0:
+		Progression.add_points(Progression.FORESTRY, points_per_log * fresh, "Logs delivered")
 	stored_changed.emit(stored, capacity)
 
 
-## Takes the top log off the stack and puts it on the player's shoulder.
-func _take_log(player) -> void:
-	stored -= 1
-	var top := _stack_root.get_child(_stack_root.get_child_count() - 1)
-	_stack_root.remove_child(top)
-	top.queue_free()
+## Takes as many logs as the player can carry off the top of the stack.
+func _take_logs(player) -> void:
+	while stored > 0 and player.can_carry_more():
+		stored -= 1
+		var top := _stack_root.get_child(_stack_root.get_child_count() - 1)
+		_stack_root.remove_child(top)
+		top.queue_free()
 
-	var item = LOG_SCENE.instantiate()
-	item.from_stack = true
-	get_parent().add_child(item)
-	item.global_position = player.global_position + Vector3.UP * 1.4
-	player.pick_up(item)
+		var item = LOG_SCENE.instantiate()
+		item.counted = true
+		get_parent().add_child(item)
+		item.global_position = player.global_position + Vector3.UP * 1.4
+		player.pick_up(item)
 	stored_changed.emit(stored, capacity)
+
+
+func _logs_text(count: int) -> String:
+	return "1 log" if count == 1 else "%d logs" % count
 
 
 func get_save_data() -> Dictionary:

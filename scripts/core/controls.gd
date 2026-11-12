@@ -18,6 +18,7 @@ const KEY_ACTIONS := {
 	"hotbar_2": [KEY_2],
 	"camera_rotate_left": [KEY_Q],
 	"camera_rotate_right": [KEY_E],
+	"cycle_shape": [KEY_R],
 }
 
 const MOUSE_ACTIONS := {

@@ -18,7 +18,11 @@ const AXE_REST := Vector3(-0.25, 0.15, 0.0)
 @export var walk_speed := 4.5
 @export var sprint_speed := 7.0
 ## Carrying a heavy log slows you down.
-@export var carry_speed_multiplier := 0.65
+## Speed while carrying one log; each extra log slows you a little more.
+@export var carry_speed_multiplier := 0.75
+@export var extra_log_slowdown := 0.1
+## How many logs you can carry at once. Starts at 1; Forestry upgrades (Phase 4) will raise it.
+@export var max_carry := 1
 @export var jump_velocity := 4.8
 @export var ground_acceleration := 14.0
 @export var air_acceleration := 3.0
@@ -39,7 +43,7 @@ var camera_mode := CameraMode.FIRST_PERSON
 var build_tool = null
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
-var _carried = null
+var _carried: Array = []
 var _target = null
 var _prompt := ""
 var _is_swinging := false
@@ -51,7 +55,8 @@ var _spring_arm: SpringArm3D
 var _camera: Camera3D
 var _body_parts: Array[MeshInstance3D] = []
 var _axe: Node3D
-var _hold_point: Node3D
+## Shoulder positions for carried logs, one per log.
+var _hold_points: Array[Node3D] = []
 
 
 func _ready() -> void:
@@ -72,17 +77,44 @@ func _ready() -> void:
 # --- Public API used by trees, logs and the log stack ---------------------------
 
 func is_carrying() -> bool:
-	return _carried != null
+	return not _carried.is_empty()
+
+
+func carried_count() -> int:
+	return _carried.size()
+
+
+func can_carry_more() -> bool:
+	return _carried.size() < max_carry
 
 
 func pick_up(item) -> void:
-	if _carried != null:
+	if not can_carry_more():
 		return
-	_carried = item
+	_carried.append(item)
 	item.set_carried(true)
 
 
-## Hands the carried item to someone else (e.g. the log stack) without dropping it.
+## Hands the top carried log to someone else (e.g. the log stack) without dropping it.
+func take_carried():
+	if _carried.is_empty():
+		return null
+	return _carried.pop_back()
+
+
+## Drops every carried log in front of you.
+func drop_carried() -> void:
+	var forward := -global_transform.basis.z
+	var right := global_transform.basis.x
+	var index := 0
+	while not _carried.is_empty():
+		var item = _carried.pop_back()
+		item.global_position = global_position + Vector3.UP * (1.0 + index * 0.45) + forward * 0.9 + right * ((index - 1) * 0.3)
+		item.set_carried(false)
+		item.linear_velocity = velocity * 0.5 + forward * 1.2
+		index += 1
+
+
 func set_build_mode(on: bool) -> void:
 	_axe.visible = not on
 
@@ -112,23 +144,6 @@ func _is_birds_eye() -> bool:
 	return build_tool != null and build_tool.birds_eye
 
 
-func take_carried():
-	var item = _carried
-	_carried = null
-	return item
-
-
-func drop_carried() -> void:
-	if _carried == null:
-		return
-	var item = _carried
-	_carried = null
-	var forward := -global_transform.basis.z
-	item.global_position = global_position + Vector3.UP * 1.1 + forward * 0.8
-	item.set_carried(false)
-	item.linear_velocity = velocity * 0.5 + forward * 1.5
-
-
 # --- Saving ----------------------------------------------------------------------
 
 func get_save_data() -> Dictionary:
@@ -138,8 +153,7 @@ func get_save_data() -> Dictionary:
 		"yaw": rotation.y,
 		"pitch": _head.rotation.x,
 		"camera": camera_mode,
-		"carrying": is_carrying(),
-		"carrying_from_stack": is_carrying() and _carried.from_stack,
+		"carried": _carried.map(func(item): return item.counted),
 	}
 
 
@@ -187,7 +201,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _interact() -> void:
 	if _target != null and _target.has_method("interact"):
 		_target.interact(self)
-	elif _carried != null:
+	elif is_carrying():
 		drop_carried()
 
 
@@ -196,8 +210,8 @@ func _interact() -> void:
 func _physics_process(delta: float) -> void:
 	_move(delta)
 
-	if _carried != null:
-		_carried.global_transform = _hold_point.global_transform
+	for i in _carried.size():
+		_carried[i].global_transform = _hold_points[mini(i, _hold_points.size() - 1)].global_transform
 
 	_update_target()
 	_update_chopping()
@@ -209,7 +223,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _move(delta: float) -> void:
-	var carrying := _carried != null
+	var carrying := is_carrying()
 
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
@@ -225,7 +239,7 @@ func _move(delta: float) -> void:
 	if Input.is_action_pressed("sprint") and not carrying:
 		speed = sprint_speed
 	if carrying:
-		speed *= carry_speed_multiplier
+		speed *= maxf(carry_speed_multiplier - extra_log_slowdown * (_carried.size() - 1), 0.3)
 
 	var accel := ground_acceleration if is_on_floor() else air_acceleration
 	var weight := clampf(accel * delta, 0.0, 1.0)
@@ -240,7 +254,7 @@ func _update_chopping() -> void:
 	if not chop_held:
 		_suppress_chop = false
 		return
-	if _suppress_chop or _is_swinging or _carried != null or is_building():
+	if _suppress_chop or _is_swinging or is_carrying() or is_building():
 		return
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return
@@ -260,8 +274,8 @@ func _update_target() -> void:
 			if text != "":
 				_target = collider
 
-	if text == "" and _carried != null and not _is_birds_eye():
-		text = "[E] Drop log"
+	if text == "" and is_carrying() and not _is_birds_eye():
+		text = "[E] Drop log" if _carried.size() == 1 else "[E] Drop %d logs" % _carried.size()
 
 	if text != _prompt:
 		_prompt = text
@@ -273,8 +287,8 @@ func _raycast() -> Dictionary:
 	var forward := -_camera.global_transform.basis.z
 	var query := PhysicsRayQueryParameters3D.create(from, from + forward * reach, MASK_WORLD_AND_LOGS)
 	var exclude: Array[RID] = [get_rid()]
-	if _carried != null:
-		exclude.append(_carried.get_rid())
+	for item in _carried:
+		exclude.append(item.get_rid())
 	query.exclude = exclude
 	return get_world_3d().direct_space_state.intersect_ray(query)
 
@@ -372,10 +386,13 @@ func _build_body() -> void:
 	_body_parts.append(belt)
 
 	# Carried logs rest on the right shoulder, pointing forward.
-	_hold_point = Node3D.new()
-	_hold_point.position = Vector3(0.42, 1.42, -0.1)
-	_hold_point.rotation.y = PI * 0.5
-	add_child(_hold_point)
+	# Up to three logs: two side by side on the shoulder, one on top.
+	for offset in [Vector3(0.42, 1.42, -0.1), Vector3(0.82, 1.42, -0.1), Vector3(0.62, 1.77, -0.1)]:
+		var hold := Node3D.new()
+		hold.position = offset
+		hold.rotation.y = PI * 0.5
+		add_child(hold)
+		_hold_points.append(hold)
 
 
 func _build_camera() -> void:

@@ -15,6 +15,8 @@ var _skill_label: Label
 var _skill_bar: ProgressBar
 var _points_label: Label
 var _storage_label: Label
+var _supplies_label: Label
+var _shown_supplies := -1
 var _help_label: Label
 var _paused_label: Label
 var _banner: Label
@@ -47,6 +49,7 @@ func _process(_delta: float) -> void:
 	var birds_eye: bool = _build_tool != null and _build_tool.birds_eye
 	_paused_label.visible = Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not get_tree().paused and not birds_eye
 	_crosshair.visible = not birds_eye
+	_refresh_supplies()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -85,7 +88,18 @@ func _on_build_status_changed(text: String) -> void:
 
 
 func _on_stored_changed(count: int, capacity: int) -> void:
-	_storage_label.text = "Logs stacked:  %d / %d" % [count, capacity]
+	_storage_label.text = "Logs in storage:  %d / %d" % [count, capacity]
+
+
+## Total build supplies across every supply pile.
+func _refresh_supplies() -> void:
+	var total := 0
+	for pile in get_tree().get_nodes_in_group("supply_piles"):
+		if not pile.is_queued_for_deletion():
+			total += pile.supplies
+	if total != _shown_supplies:
+		_shown_supplies = total
+		_supplies_label.text = "Build supplies:  %d blocks" % total
 
 
 func _on_points_gained(skill: StringName, amount: int, _reason: String) -> void:
@@ -201,6 +215,10 @@ func _build() -> void:
 
 	_storage_label = _make_label(18)
 	column.add_child(_storage_label)
+
+	_supplies_label = _make_label(18)
+	_supplies_label.text = "Build supplies:  0 blocks"
+	column.add_child(_supplies_label)
 
 	# Controls reminder, bottom-left.
 	_help_label = _make_label(15)

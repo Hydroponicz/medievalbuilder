@@ -70,6 +70,10 @@ Each phase gets built, played and polished before the next starts.
   - 1 log = 10 blocks. Logs must be hauled by hand: log stack, then supply pile, then build.
   - Supply piles can be placed anywhere and power building within 12 m.
   - Build mode (B) with a ghost preview. Bird's-eye planning camera (Tab).
+  - Build shapes (R): Single, Line, Wall, Floor. Drag to build or remove whole shapes.
+  - Bird's-eye: middle-drag pan, Shift + middle-drag rotate/tilt, zoom towards cursor.
+  - Forestry points come from delivering fresh logs anywhere (log stack or supply pile).
+  - Carrying supports several logs, but starts at 1. Carrying more is a Forestry upgrade.
 - [ ] **Phase 4: First unlock.** Spend Forestry levels on Tier 1 (shelter + chopping block).
 - [ ] **Phase 5: Weather.** Rain, and a reason to keep logs covered.
 - [ ] **Phase 6: First worker.** The woodcutter's hut.
@@ -77,7 +81,9 @@ Each phase gets built, played and polished before the next starts.
 
 ## Ideas for Forestry upgrades (to design in Phase 4)
 
-Pains from building that upgrades could relieve: one log per trip (shoulder strap, wheelbarrow, cart);
+**Decided:** carrying more logs at once is an upgrade (start at 1, e.g. strap = 2, then 3, then wheelbarrow/cart).
+
+Other pains from building that upgrades could relieve:
 the log stack is far from the build site (extra stacks, a worker who hauls); chopping speed (better axes);
 trees running out (replanting); better-looking blocks (planks and beams from a chopping block or sawpit).
 

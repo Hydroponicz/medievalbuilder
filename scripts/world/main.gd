@@ -101,7 +101,7 @@ func collect_save_data() -> Dictionary:
 			continue
 		var p: Vector3 = item.global_position
 		var r: Vector3 = item.global_rotation
-		logs.append({"position": [p.x, p.y, p.z], "rotation": [r.x, r.y, r.z], "from_stack": item.from_stack})
+		logs.append({"position": [p.x, p.y, p.z], "rotation": [r.x, r.y, r.z], "counted": item.counted})
 
 	var piles := []
 	for pile in get_tree().get_nodes_in_group("supply_piles"):
@@ -132,7 +132,7 @@ func apply_save_data(data: Dictionary) -> void:
 
 	for entry in data.get("logs", []):
 		var item = _spawn_log(_to_vector3(entry.get("position")), _to_vector3(entry.get("rotation")))
-		item.from_stack = entry.get("from_stack", false)
+		item.counted = entry.get("counted", entry.get("from_stack", false))
 
 	_voxels.apply_save_data(data.get("blocks", []))
 	for entry in data.get("supply_piles", []):
@@ -144,10 +144,14 @@ func apply_save_data(data: Dictionary) -> void:
 
 	var player_data: Dictionary = data.get("player", {})
 	_player.apply_save_data(player_data)
-	if player_data.get("carrying", false):
-		var carried = _spawn_log(_player.global_position, Vector3.ZERO)
-		carried.from_stack = player_data.get("carrying_from_stack", false)
-		_player.pick_up(carried)
+	var carried: Array = player_data.get("carried", [])
+	# Older saves stored a single carried log.
+	if carried.is_empty() and player_data.get("carrying", false):
+		carried = [player_data.get("carrying_from_stack", false)]
+	for was_counted in carried:
+		var item = _spawn_log(_player.global_position, Vector3.ZERO)
+		item.counted = was_counted
+		_player.pick_up(item)
 
 
 func _spawn_log(at: Vector3, rotation_euler: Vector3):

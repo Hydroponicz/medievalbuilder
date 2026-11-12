@@ -12,6 +12,8 @@ const PLANK := preload("res://materials/wood_plank.tres")
 @export var blocks_per_log := 10
 ## How many logs fit on the pile.
 @export var max_logs := 10
+## Forestry points for delivering a freshly chopped log here (same as the log stack).
+@export var points_per_log := 2
 ## Blocks can be placed and removed within this distance (measured flat, so tall builds still work).
 @export var build_radius := 12.0
 
@@ -32,17 +34,23 @@ func _ready() -> void:
 func get_interaction_prompt(player) -> String:
 	if player.is_carrying():
 		if _has_room_for_log():
-			return "[E] Add log to build supplies   (%d blocks)" % supplies
+			var count := mini(player.carried_count(), _room_in_logs())
+			var what := "1 log" if count == 1 else "%d logs" % count
+			return "[E] Add %s to build supplies   (%d blocks)" % [what, supplies]
 		return "Build supplies are full   (%d blocks)" % supplies
 	return "Build supplies   (%d blocks)" % supplies
 
 
 func interact(player) -> void:
-	if not player.is_carrying() or not _has_room_for_log():
-		return
-	var item = player.take_carried()
-	item.queue_free()
-	add_supplies(blocks_per_log)
+	var fresh := 0
+	while player.is_carrying() and _has_room_for_log():
+		var item = player.take_carried()
+		if not item.counted:
+			fresh += 1
+		item.queue_free()
+		add_supplies(blocks_per_log)
+	if fresh > 0:
+		Progression.add_points(Progression.FORESTRY, points_per_log * fresh, "Logs delivered")
 
 
 func is_in_range(point: Vector3) -> bool:
@@ -70,7 +78,8 @@ func add_supplies(amount: int) -> void:
 func dismantle() -> void:
 	var log_count := floori(float(supplies) / blocks_per_log)
 	for i in log_count:
-		var item: Node3D = LOG_SCENE.instantiate()
+		var item = LOG_SCENE.instantiate()
+		item.counted = true
 		get_parent().add_child(item)
 		item.global_position = global_position + Vector3(randf_range(-0.6, 0.6), 0.6 + i * 0.45, randf_range(-0.6, 0.6))
 		item.rotation.y = randf() * TAU
@@ -92,7 +101,11 @@ func apply_save_data(data: Dictionary) -> void:
 
 
 func _has_room_for_log() -> bool:
-	return supplies + blocks_per_log <= max_logs * blocks_per_log
+	return _room_in_logs() > 0
+
+
+func _room_in_logs() -> int:
+	return floori(float(max_logs * blocks_per_log - supplies) / blocks_per_log)
 
 
 ## Shows roughly how full the pile is: one log per 10 supplies, in a small pyramid.

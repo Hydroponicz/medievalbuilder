@@ -11,8 +11,9 @@ const LAYER_LOGS := 4  # Physics layer 3 ("logs").
 const MASK_WORLD_AND_LOGS := 1 | 4
 
 var is_carried := false
-## True for logs taken back out of a log stack. Re-stacking them earns no extra points.
-var from_stack := false
+## True once this log has earned its Forestry points (by being delivered to a log stack or
+## supply pile). Logs taken back out of a stack are already counted, so moving them earns nothing.
+var counted := false
 
 
 func _ready() -> void:
@@ -75,13 +76,15 @@ static func build_visual() -> Node3D:
 
 
 func get_interaction_prompt(player) -> String:
-	if is_carried or player.is_carrying():
+	if is_carried or not player.can_carry_more():
 		return ""
+	if player.is_carrying():
+		return "[E] Pick up log   (carrying %d / %d)" % [player.carried_count(), player.max_carry]
 	return "[E] Pick up log"
 
 
 func interact(player) -> void:
-	if not is_carried and not player.is_carrying():
+	if not is_carried and player.can_carry_more():
 		player.pick_up(self)
 
 
