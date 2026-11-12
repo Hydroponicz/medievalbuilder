@@ -5,6 +5,8 @@ extends Node
 
 signal points_gained(skill: StringName, amount: int, reason: String)
 signal level_up(skill: StringName, new_level: int)
+## Fired when points are loaded from a save or reset for a new world.
+signal state_loaded
 
 const FORESTRY := &"forestry"
 
@@ -55,3 +57,24 @@ func get_level_bounds(skill: StringName) -> Vector2i:
 
 func get_skill_name(skill: StringName) -> String:
 	return SKILL_NAMES.get(skill, String(skill).capitalize())
+
+
+# --- Saving ----------------------------------------------------------------------
+
+func get_save_data() -> Dictionary:
+	var data := {}
+	for skill in _points:
+		data[String(skill)] = _points[skill]
+	return data
+
+
+func apply_save_data(data: Dictionary) -> void:
+	_points.clear()
+	for key in data:
+		_points[StringName(key)] = int(data[key])
+	state_loaded.emit()
+
+
+func reset() -> void:
+	_points.clear()
+	state_loaded.emit()

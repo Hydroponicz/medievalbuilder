@@ -21,8 +21,13 @@ const STUMP_HEIGHT := 0.45
 @export var points_per_hit := 1
 @export var points_for_felling := 5
 
+## Stable number given by the world, so saves can tell trees apart.
+var tree_id := -1
+
 var _hits_taken := 0
 var _is_felled := false
+var _logs_dropped := false
+var _fall_direction := Vector3.FORWARD
 var _pivot: Node3D
 var _trunk_shape: CollisionShape3D
 
@@ -133,6 +138,7 @@ func _fell(from_position: Vector3) -> void:
 	if away.length() < 0.01:
 		away = Vector3.FORWARD
 	away = away.normalized()
+	_fall_direction = away
 	var axis := Vector3.UP.cross(away).normalized()
 
 	var tween := create_tween()
@@ -146,8 +152,19 @@ func _fell(from_position: Vector3) -> void:
 func _on_fall_landed(away: Vector3) -> void:
 	var base := global_position + Vector3.UP * STUMP_HEIGHT
 	Fx.leaf_burst(get_tree().current_scene, base + away * trunk_height * 0.8)
+	_drop_logs(away)
 
-	# Break the fallen trunk into loose logs lying where it fell.
+	# Shrink away the trunk and canopy, leaving just the stump.
+	var tween := create_tween()
+	tween.tween_property(_pivot, "scale", Vector3(0.01, 0.01, 0.01), 0.3)
+	tween.tween_callback(_pivot.queue_free)
+	felled.emit(self)
+
+
+## Breaks the fallen trunk into loose logs lying where it fell.
+func _drop_logs(away: Vector3) -> void:
+	_logs_dropped = true
+	var base := global_position + Vector3.UP * STUMP_HEIGHT
 	var spacing := trunk_height / log_count
 	var yaw := atan2(-away.z, away.x)  # Logs are long along their local X axis.
 	for i in log_count:
@@ -158,11 +175,43 @@ func _on_fall_landed(away: Vector3) -> void:
 		item.global_position = spot
 		item.rotation.y = yaw
 
-	# Shrink away the trunk and canopy, leaving just the stump.
-	var tween := create_tween()
-	tween.tween_property(_pivot, "scale", Vector3(0.01, 0.01, 0.01), 0.3)
-	tween.tween_callback(_pivot.queue_free)
-	felled.emit(self)
+
+# --- Saving ----------------------------------------------------------------------
+
+## Only trees that have been touched are saved; untouched trees regenerate from the world seed.
+func get_save_data() -> Dictionary:
+	if _hits_taken == 0 and not _is_felled:
+		return {}
+	return {
+		"hits": _hits_taken,
+		"felled": _is_felled,
+		"logs_dropped": _logs_dropped,
+		"fall": [_fall_direction.x, _fall_direction.z],
+	}
+
+
+func apply_save_data(data: Dictionary) -> void:
+	_hits_taken = int(data.get("hits", 0))
+	if not data.get("felled", false):
+		return
+
+	# Already felled: show just the stump, with no animation and no points.
+	_is_felled = true
+	_trunk_shape.disabled = true
+	_pivot.queue_free()
+
+	# If the game was saved mid-fall, the logs never appeared. Drop them now.
+	_logs_dropped = data.get("logs_dropped", true)
+	if not _logs_dropped:
+		var fall: Array = data.get("fall", [0.0, -1.0])
+		_fall_direction = Vector3(float(fall[0]), 0.0, float(fall[1])).normalized()
+		_drop_logs_after_physics_ready()
+
+
+func _drop_logs_after_physics_ready() -> void:
+	# Wait one physics step so the ground can be found by the drop raycast.
+	await get_tree().physics_frame
+	_drop_logs(_fall_direction)
 
 
 func _ground_height_at(spot: Vector3) -> float:

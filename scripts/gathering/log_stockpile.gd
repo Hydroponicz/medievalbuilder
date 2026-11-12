@@ -40,17 +40,36 @@ func interact(player) -> void:
 	var item = player.take_carried()
 	item.queue_free()
 
-	var visual := LogItem.build_visual()
-	_stack_root.add_child(visual)
-	var slot := _slot_position(stored)
-	visual.position = slot + Vector3.UP * 0.35
-	visual.rotation.y = randf_range(-0.04, 0.04)
-	create_tween().tween_property(visual, "position", slot, 0.18) \
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-
+	_add_log_visual(stored, true)
 	stored += 1
 	Progression.add_points(Progression.FORESTRY, points_per_log, "Log stacked")
 	stored_changed.emit(stored, capacity)
+
+
+func get_save_data() -> Dictionary:
+	return {"stored": stored}
+
+
+func apply_save_data(data: Dictionary) -> void:
+	for child in _stack_root.get_children():
+		child.queue_free()
+	stored = clampi(int(data.get("stored", 0)), 0, capacity)
+	for i in stored:
+		_add_log_visual(i, false)
+	stored_changed.emit(stored, capacity)
+
+
+func _add_log_visual(index: int, animate: bool) -> void:
+	var visual := LogItem.build_visual()
+	_stack_root.add_child(visual)
+	var slot := _slot_position(index)
+	visual.rotation.y = randf_range(-0.04, 0.04)
+	if not animate:
+		visual.position = slot
+		return
+	visual.position = slot + Vector3.UP * 0.35
+	create_tween().tween_property(visual, "position", slot, 0.18) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
 
 func _spacing() -> float:

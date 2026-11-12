@@ -98,6 +98,31 @@ func drop_carried() -> void:
 	item.linear_velocity = velocity * 0.5 + forward * 1.5
 
 
+# --- Saving ----------------------------------------------------------------------
+
+func get_save_data() -> Dictionary:
+	var p := global_position
+	return {
+		"position": [p.x, p.y, p.z],
+		"yaw": rotation.y,
+		"pitch": _head.rotation.x,
+		"camera": camera_mode,
+		"carrying": is_carrying(),
+	}
+
+
+## Carried logs are restored by the world, which creates the log and calls pick_up().
+func apply_save_data(data: Dictionary) -> void:
+	var p: Array = data.get("position", [])
+	if p.size() == 3:
+		global_position = Vector3(float(p[0]), float(p[1]), float(p[2]))
+	rotation.y = float(data.get("yaw", rotation.y))
+	_head.rotation.x = float(data.get("pitch", 0.0))
+	camera_mode = int(data.get("camera", CameraMode.FIRST_PERSON)) as CameraMode
+	_apply_camera_mode(false)
+	velocity = Vector3.ZERO
+
+
 # --- Input -----------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -107,10 +132,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		var motion := event as InputEventMouseMotion
 		rotate_y(-motion.relative.x * mouse_sensitivity)
 		_head.rotation.x = clampf(_head.rotation.x - motion.relative.y * mouse_sensitivity, -1.45, 1.45)
-	elif event.is_action_pressed("ui_cancel"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif not captured:
-		# Click back into the game window to resume.
+		# Click back into the game window if the mouse got released (e.g. after alt-tab).
+		# Esc and the pause menu are handled by pause_menu.gd.
 		if event is InputEventMouseButton and event.is_pressed():
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			_suppress_chop = true

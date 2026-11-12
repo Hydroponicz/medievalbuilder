@@ -6,7 +6,7 @@ const SKILL := &"forestry"
 
 const HELP_TEXT := "WASD  move     Shift  sprint     Space  jump\n" \
 	+ "Mouse  look     Left click  chop     E  pick up / stack / drop\n" \
-	+ "V  first / third person     Esc  free mouse     H  hide help"
+	+ "V  first / third person     Esc  pause menu     H  hide help"
 
 var _crosshair: ColorRect
 var _prompt_label: Label
@@ -18,12 +18,16 @@ var _help_label: Label
 var _paused_label: Label
 var _banner: Label
 var _toast_anchor: Control
+var _save_notice: Label
 
 
 func _ready() -> void:
 	_build()
 	Progression.points_gained.connect(_on_points_gained)
 	Progression.level_up.connect(_on_level_up)
+	Progression.state_loaded.connect(_refresh_skill)
+	SaveGame.saved.connect(_on_saved)
+	SaveGame.loaded.connect(_show_save_notice.bind("World loaded"))
 	_refresh_skill()
 
 
@@ -34,7 +38,8 @@ func bind(player, stockpile) -> void:
 
 
 func _process(_delta: float) -> void:
-	_paused_label.visible = Input.mouse_mode != Input.MOUSE_MODE_CAPTURED
+	# Only shown if the mouse was released without pausing (e.g. after alt-tab).
+	_paused_label.visible = Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not get_tree().paused
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -51,6 +56,20 @@ func _on_prompt_changed(text: String) -> void:
 	_crosshair.offset_top = -half
 	_crosshair.offset_right = half
 	_crosshair.offset_bottom = half
+
+
+func _on_saved(is_autosave: bool) -> void:
+	# The pause menu shows its own message when saving from there.
+	if not get_tree().paused:
+		_show_save_notice("Autosaved" if is_autosave else "Game saved")
+
+
+func _show_save_notice(text: String) -> void:
+	_save_notice.text = text
+	_save_notice.modulate.a = 1.0
+	var tween := _save_notice.create_tween()
+	tween.tween_interval(1.5)
+	tween.tween_property(_save_notice, "modulate:a", 0.0, 0.8)
 
 
 func _on_stored_changed(count: int, capacity: int) -> void:
@@ -183,7 +202,18 @@ func _build() -> void:
 	_help_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	add_child(_help_label)
 
-	# Shown while the mouse is released (Esc).
+	# Small "Game saved" notice, bottom-right.
+	_save_notice = _make_label(16)
+	_save_notice.modulate = Color(1, 1, 1, 0)
+	_save_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_save_notice.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_save_notice.offset_left = -316
+	_save_notice.offset_right = -16
+	_save_notice.offset_top = -46
+	_save_notice.offset_bottom = -16
+	add_child(_save_notice)
+
+	# Shown if the mouse is released without the pause menu open.
 	_paused_label = _make_label(30)
 	_paused_label.text = "Click to play"
 	_paused_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

@@ -15,6 +15,7 @@ config/icon="res://icon.svg"
 
 Controls="*res://scripts/core/controls.gd"
 Progression="*res://scripts/progression/progression.gd"
+SaveGame="*res://scripts/core/save_game.gd"
 
 [display]
 

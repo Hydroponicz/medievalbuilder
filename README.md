@@ -44,14 +44,25 @@ If Godot asks to upgrade or convert the project to a newer version, say yes.
 | E | Pick up log / stack log / drop log |
 | V | Switch first ↔ third person |
 | H | Show / hide controls |
-| Esc | Free the mouse (click to resume) |
+| Esc | Pause menu (Resume, Save Game, New World, Save & Quit) |
+
+## Saving
+
+The game loads your world automatically when it starts. It saves every minute, when you close the window,
+and when you pick **Save Game** or **Save & Quit** in the Esc menu.
+
+Stopping the game from the Godot editor (the ■ button or F8) does **not** save. Only the autosave from the last minute is kept.
+
+To start over, open the Esc menu and choose **New World**. Click it twice to confirm.
+
+The save file is at `%APPDATA%\Godot\app_userdata\Medieval Builder\savegame.json` on Windows.
 
 ## Project layout
 
 ```
 scenes/       Godot scenes (main world, player, tree, log, log stack, HUD)
 scripts/
-  core/         input bindings
+  core/         input bindings, saving and loading
   world/        world setup and terrain generation
   player/       player movement, camera, axe, carrying
   gathering/    trees, logs, log stack

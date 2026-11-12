@@ -60,8 +60,10 @@ Each phase gets built, played and polished before the next starts.
 
 - [x] **Phase 1: Chopping by hand.** Smooth terrain, forest, first/third person, axe swing, felling,
   logs, carrying, log stack, Forestry points and levels, HUD.
-- [ ] **Phase 2: Feel pass.** Playtest Phase 1 and fix what feels off. Add sounds (chop, fall, footsteps)
-  and saving/loading.
+- [ ] **Phase 2: Feel pass.**
+  - [x] Simpler point popups ("+1 Forestry")
+  - [x] Saving and loading: autosave, save on quit, Esc pause menu, New World
+  - [ ] Sounds (chop, fall, footsteps, ambience). Postponed for now.
 - [ ] **Phase 3: Building basics.** Place and remove simple wood blocks using stored logs. Bird's-eye planning camera.
 - [ ] **Phase 4: First unlock.** Spend Forestry levels on Tier 1 (shelter + chopping block).
 - [ ] **Phase 5: Weather.** Rain, and a reason to keep logs covered.

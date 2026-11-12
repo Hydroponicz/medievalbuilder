@@ -5,33 +5,130 @@ const TREE_SCENE := preload("res://scenes/tree.tscn")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const STOCKPILE_SCENE := preload("res://scenes/log_stockpile.tscn")
 const HUD_SCENE := preload("res://scenes/hud.tscn")
+const PAUSE_MENU_SCENE := preload("res://scenes/pause_menu.tscn")
+const LOG_SCENE := preload("res://scenes/log.tscn")
 
 @export var tree_count := 140
 @export var world_seed := 2026
 ## No trees grow closer than this to the spawn point.
 @export var clearing_radius := 14.0
 @export var min_tree_spacing := 3.2
+## Seconds between automatic saves.
+@export var autosave_interval := 60.0
 
 @onready var terrain = $Terrain
+
+var _player = null
+var _stockpile = null
+## Trees in the order they were generated. A tree's index is its save ID.
+var _trees: Array = []
 
 
 func _ready() -> void:
 	_setup_environment()
 
-	var stockpile: Node3D = STOCKPILE_SCENE.instantiate()
-	add_child(stockpile)
-	stockpile.global_position = _on_ground(3.5, -2.0)
-	stockpile.rotation.y = 0.35
+	_stockpile = STOCKPILE_SCENE.instantiate()
+	add_child(_stockpile)
+	_stockpile.global_position = _on_ground(3.5, -2.0)
+	_stockpile.rotation.y = 0.35
 
-	_spawn_forest(stockpile.global_position)
+	_spawn_forest(_stockpile.global_position)
 
-	var player: Node3D = PLAYER_SCENE.instantiate()
-	add_child(player)
-	player.global_position = _on_ground(0.0, 7.0) + Vector3.UP * 0.5
+	_player = PLAYER_SCENE.instantiate()
+	add_child(_player)
+	_player.global_position = _on_ground(0.0, 7.0) + Vector3.UP * 0.5
 
 	var hud = HUD_SCENE.instantiate()
 	add_child(hud)
-	hud.bind(player, stockpile)
+	hud.bind(_player, _stockpile)
+
+	add_child(PAUSE_MENU_SCENE.instantiate())
+
+	# Pick up where we left off, if there's a save.
+	SaveGame.world = self
+	SaveGame.load_game()
+
+	var autosave := Timer.new()
+	autosave.wait_time = autosave_interval
+	autosave.autostart = true
+	autosave.timeout.connect(SaveGame.save_game.bind(true))
+	add_child(autosave)
+
+
+func _exit_tree() -> void:
+	if SaveGame.world == self:
+		SaveGame.world = null
+
+
+func _notification(what: int) -> void:
+	# Save when the game window is closed.
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		SaveGame.save_game()
+
+
+# --- Saving ----------------------------------------------------------------------
+
+func collect_save_data() -> Dictionary:
+	var trees := {}
+	for tree in _trees:
+		var tree_data: Dictionary = tree.get_save_data()
+		if not tree_data.is_empty():
+			trees[str(tree.tree_id)] = tree_data
+
+	var logs := []
+	for item in get_tree().get_nodes_in_group("logs"):
+		if item.is_queued_for_deletion() or item.is_carried:
+			continue
+		var p: Vector3 = item.global_position
+		var r: Vector3 = item.global_rotation
+		logs.append({"position": [p.x, p.y, p.z], "rotation": [r.x, r.y, r.z]})
+
+	return {
+		"seed": world_seed,
+		"player": _player.get_save_data(),
+		"stockpile": _stockpile.get_save_data(),
+		"trees": trees,
+		"logs": logs,
+	}
+
+
+func apply_save_data(data: Dictionary) -> void:
+	# Tree IDs only match if the forest was generated from the same seed.
+	if int(data.get("seed", world_seed)) == world_seed:
+		var trees: Dictionary = data.get("trees", {})
+		for key in trees:
+			var id := int(key)
+			if id >= 0 and id < _trees.size():
+				_trees[id].apply_save_data(trees[key])
+	else:
+		push_warning("Save was made with a different world seed; trees were not restored.")
+
+	for entry in data.get("logs", []):
+		_spawn_log(_to_vector3(entry.get("position")), _to_vector3(entry.get("rotation")))
+
+	_stockpile.apply_save_data(data.get("stockpile", {}))
+
+	var player_data: Dictionary = data.get("player", {})
+	_player.apply_save_data(player_data)
+	if player_data.get("carrying", false):
+		_player.pick_up(_spawn_log(_player.global_position, Vector3.ZERO))
+
+
+func _spawn_log(at: Vector3, rotation_euler: Vector3) -> Node3D:
+	var item: Node3D = LOG_SCENE.instantiate()
+	add_child(item)
+	item.global_position = at
+	item.global_rotation = rotation_euler
+	return item
+
+
+func _to_vector3(value) -> Vector3:
+	if value is Array and value.size() == 3:
+		return Vector3(float(value[0]), float(value[1]), float(value[2]))
+	return Vector3.ZERO
+
+
+# --- World generation ------------------------------------------------------------
 
 
 func _on_ground(x: float, z: float) -> Vector3:
@@ -70,6 +167,8 @@ func _spawn_forest(keep_clear: Vector3) -> void:
 		tree.trunk_radius = lerpf(0.24, 0.38, (height - 4.5) / 3.5)
 		tree.hits_to_fell = int(round(height * 0.8))
 		tree.log_count = maxi(2, int(round(height / 2.2)))
+		tree.tree_id = _trees.size()
+		_trees.append(tree)
 		add_child(tree)
 		tree.global_position = _on_ground(spot.x, spot.y)
 
