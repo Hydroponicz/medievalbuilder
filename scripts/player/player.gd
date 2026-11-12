@@ -35,6 +35,8 @@ const AXE_REST := Vector3(-0.25, 0.15, 0.0)
 @export var swing_duration := 0.55
 
 var camera_mode := CameraMode.FIRST_PERSON
+## Set by the world. Lets the player know about build mode and the bird's-eye camera.
+var build_tool = null
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _carried = null
@@ -81,6 +83,35 @@ func pick_up(item) -> void:
 
 
 ## Hands the carried item to someone else (e.g. the log stack) without dropping it.
+func set_build_mode(on: bool) -> void:
+	_axe.visible = not on
+
+
+func make_camera_current() -> void:
+	_camera.current = true
+
+
+func get_aim_origin() -> Vector3:
+	return _head.global_position
+
+
+func get_aim_direction() -> Vector3:
+	return -_camera.global_transform.basis.z
+
+
+## The space the player's body takes up, so blocks can't be placed inside you.
+func get_body_aabb() -> AABB:
+	return AABB(global_position + Vector3(-0.35, 0.0, -0.35), Vector3(0.7, 1.8, 0.7))
+
+
+func is_building() -> bool:
+	return build_tool != null and build_tool.active
+
+
+func _is_birds_eye() -> bool:
+	return build_tool != null and build_tool.birds_eye
+
+
 func take_carried():
 	var item = _carried
 	_carried = null
@@ -108,6 +139,7 @@ func get_save_data() -> Dictionary:
 		"pitch": _head.rotation.x,
 		"camera": camera_mode,
 		"carrying": is_carrying(),
+		"carrying_from_stack": is_carrying() and _carried.from_stack,
 	}
 
 
@@ -126,6 +158,9 @@ func apply_save_data(data: Dictionary) -> void:
 # --- Input -----------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
+	# In bird's-eye view the keyboard and mouse drive the overhead camera instead.
+	if _is_birds_eye():
+		return
 	var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
 	if event is InputEventMouseMotion and captured:
@@ -181,7 +216,9 @@ func _move(delta: float) -> void:
 	elif Input.is_action_just_pressed("jump"):
 		velocity.y = jump_velocity * (0.7 if carrying else 1.0)
 
-	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var input := Vector2.ZERO
+	if not _is_birds_eye():
+		input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var direction := (transform.basis * Vector3(input.x, 0.0, input.y)).normalized()
 
 	var speed := walk_speed
@@ -203,7 +240,7 @@ func _update_chopping() -> void:
 	if not chop_held:
 		_suppress_chop = false
 		return
-	if _suppress_chop or _is_swinging or _carried != null:
+	if _suppress_chop or _is_swinging or _carried != null or is_building():
 		return
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return
@@ -212,9 +249,9 @@ func _update_chopping() -> void:
 
 ## Looks at whatever is under the crosshair and updates the on-screen prompt.
 func _update_target() -> void:
-	var hit := _raycast()
 	var text := ""
 	_target = null
+	var hit := {} if _is_birds_eye() else _raycast()
 
 	if not hit.is_empty():
 		var collider = hit.collider
@@ -223,7 +260,7 @@ func _update_target() -> void:
 			if text != "":
 				_target = collider
 
-	if text == "" and _carried != null:
+	if text == "" and _carried != null and not _is_birds_eye():
 		text = "[E] Drop log"
 
 	if text != _prompt:

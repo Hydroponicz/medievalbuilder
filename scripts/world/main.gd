@@ -7,6 +7,10 @@ const STOCKPILE_SCENE := preload("res://scenes/log_stockpile.tscn")
 const HUD_SCENE := preload("res://scenes/hud.tscn")
 const PAUSE_MENU_SCENE := preload("res://scenes/pause_menu.tscn")
 const LOG_SCENE := preload("res://scenes/log.tscn")
+const SUPPLY_PILE_SCENE := preload("res://scenes/supply_pile.tscn")
+const VoxelWorld := preload("res://scripts/building/voxel_world.gd")
+const BuildTool := preload("res://scripts/building/build_tool.gd")
+const BirdsEyeCamera := preload("res://scripts/building/birds_eye_camera.gd")
 
 @export var tree_count := 140
 @export var world_seed := 2026
@@ -20,6 +24,8 @@ const LOG_SCENE := preload("res://scenes/log.tscn")
 
 var _player = null
 var _stockpile = null
+var _voxels = null
+var _build_tool = null
 ## Trees in the order they were generated. A tree's index is its save ID.
 var _trees: Array = []
 
@@ -38,9 +44,23 @@ func _ready() -> void:
 	add_child(_player)
 	_player.global_position = _on_ground(0.0, 7.0) + Vector3.UP * 0.5
 
+	# Building: the blocks themselves, the overhead camera, and the build tool.
+	_voxels = VoxelWorld.new()
+	_voxels.name = "Buildings"
+	add_child(_voxels)
+	var birds_eye = BirdsEyeCamera.new()
+	birds_eye.name = "BirdsEyeCamera"
+	birds_eye.terrain = terrain
+	add_child(birds_eye)
+	_build_tool = BuildTool.new()
+	_build_tool.name = "BuildTool"
+	add_child(_build_tool)
+	_build_tool.setup(_player, _voxels, birds_eye, self)
+	_player.build_tool = _build_tool
+
 	var hud = HUD_SCENE.instantiate()
 	add_child(hud)
-	hud.bind(_player, _stockpile)
+	hud.bind(_player, _stockpile, _build_tool)
 
 	add_child(PAUSE_MENU_SCENE.instantiate())
 
@@ -81,7 +101,12 @@ func collect_save_data() -> Dictionary:
 			continue
 		var p: Vector3 = item.global_position
 		var r: Vector3 = item.global_rotation
-		logs.append({"position": [p.x, p.y, p.z], "rotation": [r.x, r.y, r.z]})
+		logs.append({"position": [p.x, p.y, p.z], "rotation": [r.x, r.y, r.z], "from_stack": item.from_stack})
+
+	var piles := []
+	for pile in get_tree().get_nodes_in_group("supply_piles"):
+		if not pile.is_queued_for_deletion():
+			piles.append(pile.get_save_data())
 
 	return {
 		"seed": world_seed,
@@ -89,6 +114,8 @@ func collect_save_data() -> Dictionary:
 		"stockpile": _stockpile.get_save_data(),
 		"trees": trees,
 		"logs": logs,
+		"blocks": _voxels.get_save_data(),
+		"supply_piles": piles,
 	}
 
 
@@ -104,18 +131,27 @@ func apply_save_data(data: Dictionary) -> void:
 		push_warning("Save was made with a different world seed; trees were not restored.")
 
 	for entry in data.get("logs", []):
-		_spawn_log(_to_vector3(entry.get("position")), _to_vector3(entry.get("rotation")))
+		var item = _spawn_log(_to_vector3(entry.get("position")), _to_vector3(entry.get("rotation")))
+		item.from_stack = entry.get("from_stack", false)
+
+	_voxels.apply_save_data(data.get("blocks", []))
+	for entry in data.get("supply_piles", []):
+		var pile = SUPPLY_PILE_SCENE.instantiate()
+		add_child(pile)
+		pile.apply_save_data(entry)
 
 	_stockpile.apply_save_data(data.get("stockpile", {}))
 
 	var player_data: Dictionary = data.get("player", {})
 	_player.apply_save_data(player_data)
 	if player_data.get("carrying", false):
-		_player.pick_up(_spawn_log(_player.global_position, Vector3.ZERO))
+		var carried = _spawn_log(_player.global_position, Vector3.ZERO)
+		carried.from_stack = player_data.get("carrying_from_stack", false)
+		_player.pick_up(carried)
 
 
-func _spawn_log(at: Vector3, rotation_euler: Vector3) -> Node3D:
-	var item: Node3D = LOG_SCENE.instantiate()
+func _spawn_log(at: Vector3, rotation_euler: Vector3):
+	var item = LOG_SCENE.instantiate()
 	add_child(item)
 	item.global_position = at
 	item.global_rotation = rotation_euler

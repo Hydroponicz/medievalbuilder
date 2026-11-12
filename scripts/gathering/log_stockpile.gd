@@ -6,6 +6,7 @@ signal stored_changed(count: int, capacity: int)
 
 const LogItem := preload("res://scripts/gathering/log_item.gd")
 const PLANK := preload("res://materials/wood_plank.tres")
+const LOG_SCENE := preload("res://scenes/log.tscn")
 
 @export var rows := 6
 @export var logs_per_row := 4
@@ -31,18 +32,45 @@ func get_interaction_prompt(player) -> String:
 		if stored < capacity:
 			return "[E] Stack log   (%d / %d)" % [stored, capacity]
 		return "Log stack is full   (%d / %d)" % [stored, capacity]
-	return "Log stack   (%d / %d)" % [stored, capacity]
+	if stored > 0:
+		return "[E] Take log   (%d / %d)" % [stored, capacity]
+	return "Log stack is empty   (0 / %d)" % capacity
 
 
 func interact(player) -> void:
-	if not player.is_carrying() or stored >= capacity:
+	if player.is_carrying():
+		_stack_log(player)
+	elif stored > 0:
+		_take_log(player)
+
+
+func _stack_log(player) -> void:
+	if stored >= capacity:
 		return
 	var item = player.take_carried()
+	# Only fresh logs earn points, so taking a log out and putting it back isn't a points trick.
+	var is_fresh: bool = not item.from_stack
 	item.queue_free()
 
 	_add_log_visual(stored, true)
 	stored += 1
-	Progression.add_points(Progression.FORESTRY, points_per_log, "Log stacked")
+	if is_fresh:
+		Progression.add_points(Progression.FORESTRY, points_per_log, "Log stacked")
+	stored_changed.emit(stored, capacity)
+
+
+## Takes the top log off the stack and puts it on the player's shoulder.
+func _take_log(player) -> void:
+	stored -= 1
+	var top := _stack_root.get_child(_stack_root.get_child_count() - 1)
+	_stack_root.remove_child(top)
+	top.queue_free()
+
+	var item = LOG_SCENE.instantiate()
+	item.from_stack = true
+	get_parent().add_child(item)
+	item.global_position = player.global_position + Vector3.UP * 1.4
+	player.pick_up(item)
 	stored_changed.emit(stored, capacity)
 
 
@@ -52,6 +80,7 @@ func get_save_data() -> Dictionary:
 
 func apply_save_data(data: Dictionary) -> void:
 	for child in _stack_root.get_children():
+		_stack_root.remove_child(child)
 		child.queue_free()
 	stored = clampi(int(data.get("stored", 0)), 0, capacity)
 	for i in stored:

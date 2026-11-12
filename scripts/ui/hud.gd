@@ -5,8 +5,9 @@ extends CanvasLayer
 const SKILL := &"forestry"
 
 const HELP_TEXT := "WASD  move     Shift  sprint     Space  jump\n" \
-	+ "Mouse  look     Left click  chop     E  pick up / stack / drop\n" \
-	+ "V  first / third person     Esc  pause menu     H  hide help"
+	+ "Mouse  look     Left click  chop     E  pick up / take / stack / drop\n" \
+	+ "B  build mode     Tab  bird's-eye view     V  first / third person\n" \
+	+ "Esc  pause menu     H  hide help"
 
 var _crosshair: ColorRect
 var _prompt_label: Label
@@ -19,6 +20,8 @@ var _paused_label: Label
 var _banner: Label
 var _toast_anchor: Control
 var _save_notice: Label
+var _build_label: Label
+var _build_tool = null
 
 
 func _ready() -> void:
@@ -31,7 +34,9 @@ func _ready() -> void:
 	_refresh_skill()
 
 
-func bind(player, stockpile) -> void:
+func bind(player, stockpile, build_tool) -> void:
+	_build_tool = build_tool
+	build_tool.status_changed.connect(_on_build_status_changed)
 	player.prompt_changed.connect(_on_prompt_changed)
 	stockpile.stored_changed.connect(_on_stored_changed)
 	_on_stored_changed(stockpile.stored, stockpile.capacity)
@@ -39,7 +44,9 @@ func bind(player, stockpile) -> void:
 
 func _process(_delta: float) -> void:
 	# Only shown if the mouse was released without pausing (e.g. after alt-tab).
-	_paused_label.visible = Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not get_tree().paused
+	var birds_eye: bool = _build_tool != null and _build_tool.birds_eye
+	_paused_label.visible = Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not get_tree().paused and not birds_eye
+	_crosshair.visible = not birds_eye
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -70,6 +77,11 @@ func _show_save_notice(text: String) -> void:
 	var tween := _save_notice.create_tween()
 	tween.tween_interval(1.5)
 	tween.tween_property(_save_notice, "modulate:a", 0.0, 0.8)
+
+
+func _on_build_status_changed(text: String) -> void:
+	_build_label.text = text
+	_build_label.visible = text != ""
 
 
 func _on_stored_changed(count: int, capacity: int) -> void:
@@ -149,8 +161,8 @@ func _build() -> void:
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_banner.modulate = Color(1.0, 0.86, 0.5, 0.0)
 	_banner.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_banner.offset_top = 90
-	_banner.offset_bottom = 140
+	_banner.offset_top = 130
+	_banner.offset_bottom = 180
 	add_child(_banner)
 
 	# Skill panel, top-left.
@@ -197,10 +209,19 @@ func _build() -> void:
 	_help_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_help_label.offset_left = 16
 	_help_label.offset_right = 700
-	_help_label.offset_top = -80
+	_help_label.offset_top = -100
 	_help_label.offset_bottom = -16
 	_help_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	add_child(_help_label)
+
+	# Build mode info, top-centre.
+	_build_label = _make_label(18)
+	_build_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_build_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_build_label.offset_top = 14
+	_build_label.offset_bottom = 120
+	_build_label.visible = false
+	add_child(_build_label)
 
 	# Small "Game saved" notice, bottom-right.
 	_save_notice = _make_label(16)

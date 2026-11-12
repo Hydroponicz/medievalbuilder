@@ -40,7 +40,7 @@ func _ready() -> void:
 
 
 func get_interaction_prompt(player) -> String:
-	if _is_felled or player.is_carrying():
+	if _is_felled or player.is_carrying() or player.is_building():
 		return ""
 	return "[LMB] Chop tree   (%d / %d)" % [_hits_taken, hits_to_fell]
 

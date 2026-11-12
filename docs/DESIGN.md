@@ -34,7 +34,8 @@ Resource lines feed each other. For example: wheat field -> granary -> mill (its
 | --- | --- |
 | Engine | Godot 4 (4.3+), GDScript |
 | Terrain | Smooth, rolling and natural. **Not** blocky. |
-| Building | Voxel/block building for player structures (Enshrouded-style). Planned, not built yet. |
+| Building | 0.5 m voxel blocks for player structures (Enshrouded-style) |
+| Block cost | 1 log = 10 rough log blocks. Resources must be hauled to a supply pile at the build site. |
 | Cameras | First person, third person, and a bird's-eye camera for planning big builds (comes with building). |
 | Players | Single-player only |
 | Goal | Open-ended sandbox |
@@ -64,11 +65,21 @@ Each phase gets built, played and polished before the next starts.
   - [x] Simpler point popups ("+1 Forestry")
   - [x] Saving and loading: autosave, save on quit, Esc pause menu, New World
   - [ ] Sounds (chop, fall, footsteps, ambience). Postponed for now.
-- [ ] **Phase 3: Building basics.** Place and remove simple wood blocks using stored logs. Bird's-eye planning camera.
+- [ ] **Phase 3: Building basics.** (built, in testing)
+  - 0.5 m voxel blocks on a world grid. First block type: rough log block.
+  - 1 log = 10 blocks. Logs must be hauled by hand: log stack, then supply pile, then build.
+  - Supply piles can be placed anywhere and power building within 12 m.
+  - Build mode (B) with a ghost preview. Bird's-eye planning camera (Tab).
 - [ ] **Phase 4: First unlock.** Spend Forestry levels on Tier 1 (shelter + chopping block).
 - [ ] **Phase 5: Weather.** Rain, and a reason to keep logs covered.
 - [ ] **Phase 6: First worker.** The woodcutter's hut.
 - Later: farming line, mill, stone/mining line, and more.
+
+## Ideas for Forestry upgrades (to design in Phase 4)
+
+Pains from building that upgrades could relieve: one log per trip (shoulder strap, wheelbarrow, cart);
+the log stack is far from the build site (extra stacks, a worker who hauls); chopping speed (better axes);
+trees running out (replanting); better-looking blocks (planks and beams from a chopping block or sawpit).
 
 ## Open questions
 

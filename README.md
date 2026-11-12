@@ -41,10 +41,31 @@ If Godot asks to upgrade or convert the project to a newer version, say yes.
 | Space | Jump |
 | Mouse | Look |
 | Left click (hold) | Swing axe / chop |
-| E | Pick up log / stack log / drop log |
+| E | Pick up log / take log from stack / stack log / add log to supplies / drop log |
 | V | Switch first ↔ third person |
+| B | Build mode on / off |
+| Tab | Bird's-eye view (also turns on build mode) |
 | H | Show / hide controls |
 | Esc | Pause menu (Resume, Save Game, New World, Save & Quit) |
+
+### In build mode
+
+| Key | Action |
+| --- | --- |
+| Left click (hold) | Place block (or supply pile) |
+| Right click (hold) | Remove block. Right click a supply pile to pack it up. |
+| 1 / 2 | Select rough log block / supply pile |
+
+In bird's-eye view: **WASD** pans, **Shift** pans faster, **Q / E** rotate, **mouse wheel** zooms, and the mouse aims.
+
+## How building works
+
+1. Chop trees and stack the logs on the log stack.
+2. In build mode, press **2** and place a **supply pile** where you want to build.
+3. Take logs from the log stack (E with empty hands) and carry them to the supply pile (E).
+   Each log becomes **10 blocks** of build supplies.
+4. Press **1** and build. Blocks within 12 m of a supply pile use its supplies.
+   Removing a block puts its wood back on the pile.
 
 ## Saving
 
@@ -66,6 +87,7 @@ scripts/
   world/        world setup and terrain generation
   player/       player movement, camera, axe, carrying
   gathering/    trees, logs, log stack
+  building/     blocks, supply piles, build mode, bird's-eye camera
   progression/  skill points and levels
   ui/           the HUD
   fx/           small visual effects

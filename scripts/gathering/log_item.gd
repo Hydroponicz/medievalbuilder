@@ -11,6 +11,8 @@ const LAYER_LOGS := 4  # Physics layer 3 ("logs").
 const MASK_WORLD_AND_LOGS := 1 | 4
 
 var is_carried := false
+## True for logs taken back out of a log stack. Re-stacking them earns no extra points.
+var from_stack := false
 
 
 func _ready() -> void:
