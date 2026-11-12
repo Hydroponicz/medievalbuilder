@@ -57,12 +57,10 @@ func _on_stored_changed(count: int, capacity: int) -> void:
 	_storage_label.text = "Logs stacked:  %d / %d" % [count, capacity]
 
 
-func _on_points_gained(skill: StringName, amount: int, reason: String) -> void:
+func _on_points_gained(skill: StringName, amount: int, _reason: String) -> void:
 	_refresh_skill()
 	var toast := _make_label(20)
 	toast.text = "+%d %s" % [amount, Progression.get_skill_name(skill)]
-	if reason != "":
-		toast.text += "   " + reason
 	toast.modulate = Color(1.0, 0.86, 0.5)
 	toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toast.size = Vector2(400, 30)
