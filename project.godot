@@ -1,0 +1,32 @@
+; Engine configuration file.
+; Open this folder in Godot 4.3 or newer.
+
+config_version=5
+
+[application]
+
+config/name="Medieval Builder"
+config/description="Start small, work by hand, and grow your own living medieval industry."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.3", "Forward Plus")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Controls="*res://scripts/core/controls.gd"
+Progression="*res://scripts/progression/progression.gd"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="player"
+3d_physics/layer_3="logs"
+
+[rendering]
+
+anti_aliasing/quality/msaa_3d=2
