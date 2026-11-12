@@ -74,7 +74,11 @@ Each phase gets built, played and polished before the next starts.
   - Bird's-eye: middle-drag pan, Shift + middle-drag rotate/tilt, zoom towards cursor.
   - Forestry points come from delivering fresh logs anywhere (log stack or supply pile).
   - Carrying supports several logs, but starts at 1. Carrying more is a Forestry upgrade.
-- [ ] **Phase 4: First unlock.** Spend Forestry levels on Tier 1 (shelter + chopping block).
+- [ ] **Phase 4: Forestry upgrade tree.**
+  - [x] 4a (in testing): unlock points (1 per level, player chooses the order), Forestry screen (K),
+    tools crafted at the log stack from stored logs, structures built from supply piles.
+    Shoulder strap (carry 2), Sharpened axe (~40% fewer hits), Chopping block (log -> plank bundle = 20 plank blocks).
+  - [ ] 4b: Log shelter, Carrying frame (carry 3, needs strap), Sapling nursery (needs chopping block).
 - [ ] **Phase 5: Weather.** Rain, and a reason to keep logs covered.
 - [ ] **Phase 6: First worker.** The woodcutter's hut.
 - Later: farming line, mill, stone/mining line, and more.

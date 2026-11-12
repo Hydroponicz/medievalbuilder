@@ -42,7 +42,14 @@ func _ready() -> void:
 func get_interaction_prompt(player) -> String:
 	if _is_felled or player.is_carrying() or player.is_building():
 		return ""
-	return "[LMB] Chop tree   (%d / %d)" % [_hits_taken, hits_to_fell]
+	return "[LMB] Chop tree   (%d / %d)" % [_hits_taken, hits_needed()]
+
+
+## The Sharpened axe upgrade cuts the hits needed by about 40%.
+func hits_needed() -> int:
+	if Progression.has_upgrade("sharpened_axe"):
+		return maxi(2, ceili(hits_to_fell * 0.6))
+	return hits_to_fell
 
 
 func chop(player: Node3D, hit_point: Vector3) -> void:
@@ -51,7 +58,7 @@ func chop(player: Node3D, hit_point: Vector3) -> void:
 	_hits_taken += 1
 	Progression.add_points(Progression.FORESTRY, points_per_hit, "Chop")
 	Fx.wood_chips(get_tree().current_scene, hit_point)
-	if _hits_taken >= hits_to_fell:
+	if _hits_taken >= hits_needed():
 		_fell(player.global_position)
 	else:
 		_shake()

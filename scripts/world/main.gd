@@ -6,6 +6,9 @@ const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const STOCKPILE_SCENE := preload("res://scenes/log_stockpile.tscn")
 const HUD_SCENE := preload("res://scenes/hud.tscn")
 const PAUSE_MENU_SCENE := preload("res://scenes/pause_menu.tscn")
+const SKILL_SCREEN_SCENE := preload("res://scenes/skill_screen.tscn")
+const PLANK_BUNDLE_SCENE := preload("res://scenes/plank_bundle.tscn")
+const CHOPPING_BLOCK_SCENE := preload("res://scenes/chopping_block.tscn")
 const LOG_SCENE := preload("res://scenes/log.tscn")
 const SUPPLY_PILE_SCENE := preload("res://scenes/supply_pile.tscn")
 const VoxelWorld := preload("res://scripts/building/voxel_world.gd")
@@ -63,6 +66,10 @@ func _ready() -> void:
 	hud.bind(_player, _stockpile, _build_tool)
 
 	add_child(PAUSE_MENU_SCENE.instantiate())
+	# Added after the pause menu so it gets Esc first while it's open.
+	var skill_screen = SKILL_SCREEN_SCENE.instantiate()
+	add_child(skill_screen)
+	skill_screen.bind(_player, _stockpile)
 
 	# Pick up where we left off, if there's a save.
 	SaveGame.world = self
@@ -108,6 +115,19 @@ func collect_save_data() -> Dictionary:
 		if not pile.is_queued_for_deletion():
 			piles.append(pile.get_save_data())
 
+	var bundles := []
+	for bundle in get_tree().get_nodes_in_group("plank_bundles"):
+		if bundle.is_queued_for_deletion() or bundle.is_carried:
+			continue
+		var bp: Vector3 = bundle.global_position
+		var br: Vector3 = bundle.global_rotation
+		bundles.append({"position": [bp.x, bp.y, bp.z], "rotation": [br.x, br.y, br.z]})
+
+	var chopping_blocks := []
+	for block in get_tree().get_nodes_in_group("chopping_blocks"):
+		if not block.is_queued_for_deletion():
+			chopping_blocks.append(block.get_save_data())
+
 	return {
 		"seed": world_seed,
 		"player": _player.get_save_data(),
@@ -116,6 +136,8 @@ func collect_save_data() -> Dictionary:
 		"logs": logs,
 		"blocks": _voxels.get_save_data(),
 		"supply_piles": piles,
+		"plank_bundles": bundles,
+		"chopping_blocks": chopping_blocks,
 	}
 
 
@@ -140,6 +162,17 @@ func apply_save_data(data: Dictionary) -> void:
 		add_child(pile)
 		pile.apply_save_data(entry)
 
+	for entry in data.get("plank_bundles", []):
+		var bundle = PLANK_BUNDLE_SCENE.instantiate()
+		add_child(bundle)
+		bundle.global_position = _to_vector3(entry.get("position"))
+		bundle.global_rotation = _to_vector3(entry.get("rotation"))
+
+	for entry in data.get("chopping_blocks", []):
+		var block = CHOPPING_BLOCK_SCENE.instantiate()
+		add_child(block)
+		block.apply_save_data(entry)
+
 	_stockpile.apply_save_data(data.get("stockpile", {}))
 
 	var player_data: Dictionary = data.get("player", {})
@@ -148,9 +181,19 @@ func apply_save_data(data: Dictionary) -> void:
 	# Older saves stored a single carried log.
 	if carried.is_empty() and player_data.get("carrying", false):
 		carried = [player_data.get("carrying_from_stack", false)]
-	for was_counted in carried:
-		var item = _spawn_log(_player.global_position, Vector3.ZERO)
-		item.counted = was_counted
+	for entry in carried:
+		# Older saves stored just true/false (was the log counted) for each carried log.
+		var kind: String = entry.get("kind", "log") if entry is Dictionary else "log"
+		var item
+		if kind == "planks":
+			item = PLANK_BUNDLE_SCENE.instantiate()
+			add_child(item)
+			item.global_position = _player.global_position
+		else:
+			item = _spawn_log(_player.global_position, Vector3.ZERO)
+			item.counted = entry.get("counted", false) if entry is Dictionary else bool(entry)
+		# Make room in case the save had more than the current carry limit.
+		_player.max_carry = maxi(_player.max_carry, _player.carried_count() + 1)
 		_player.pick_up(item)
 
 

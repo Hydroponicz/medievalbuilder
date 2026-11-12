@@ -29,29 +29,52 @@ func _ready() -> void:
 
 
 func get_interaction_prompt(player) -> String:
-	if player.is_carrying():
+	if player.has_carried_kind("log"):
 		if stored < capacity:
-			var count := mini(player.carried_count(), capacity - stored)
+			var count := mini(_carried_log_count(player), capacity - stored)
 			return "[E] Stack %s   (%d / %d)" % [_logs_text(count), stored, capacity]
 		return "Log stack is full   (%d / %d)" % [stored, capacity]
+	if player.is_carrying():
+		return "Log stack   (%d / %d)   Only logs go here" % [stored, capacity]
 	if stored > 0:
 		var count := mini(player.max_carry, stored)
-		return "[E] Take %s   (%d / %d)" % [_logs_text(count), stored, capacity]
-	return "Log stack is empty   (0 / %d)" % capacity
+		return "[E] Take %s   (%d / %d)     [K] Forestry upgrades" % [_logs_text(count), stored, capacity]
+	return "Log stack is empty   (0 / %d)   [K] Forestry upgrades" % capacity
 
 
 func interact(player) -> void:
-	if player.is_carrying():
+	if player.has_carried_kind("log"):
 		_stack_carried_logs(player)
-	else:
+	elif not player.is_carrying():
 		_take_logs(player)
+
+
+## Removes logs from storage to pay for crafting. Returns false if there aren't enough.
+func remove_logs(count: int) -> bool:
+	if stored < count:
+		return false
+	for i in count:
+		stored -= 1
+		var top := _stack_root.get_child(_stack_root.get_child_count() - 1)
+		_stack_root.remove_child(top)
+		top.queue_free()
+	stored_changed.emit(stored, capacity)
+	return true
+
+
+func _carried_log_count(player) -> int:
+	var count := 0
+	for item in player.get_carried():
+		if item.kind == "log":
+			count += 1
+	return count
 
 
 ## Stacks every log the player is carrying (as many as fit).
 func _stack_carried_logs(player) -> void:
 	var fresh := 0
-	while player.is_carrying() and stored < capacity:
-		var item = player.take_carried()
+	while player.has_carried_kind("log") and stored < capacity:
+		var item = player.take_carried_of_kind("log")
 		if not item.counted:
 			fresh += 1
 		item.queue_free()

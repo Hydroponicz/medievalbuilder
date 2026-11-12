@@ -9,6 +9,7 @@ enum CameraMode { FIRST_PERSON, THIRD_PERSON }
 const HANDLE := preload("res://materials/wood_plank.tres")
 const METAL := preload("res://materials/axe_metal.tres")
 const BODY := preload("res://materials/player_body.tres")
+const SHARP_METAL := preload("res://materials/axe_metal_sharp.tres")
 
 const LAYER_PLAYER := 2
 const MASK_WORLD_AND_LOGS := 1 | 4
@@ -21,8 +22,11 @@ const AXE_REST := Vector3(-0.25, 0.15, 0.0)
 ## Speed while carrying one log; each extra log slows you a little more.
 @export var carry_speed_multiplier := 0.75
 @export var extra_log_slowdown := 0.1
-## How many logs you can carry at once. Starts at 1; Forestry upgrades (Phase 4) will raise it.
-@export var max_carry := 1
+## How many things (logs, plank bundles) you can carry at once by hand.
+## The Shoulder strap upgrade adds one.
+@export var base_max_carry := 1
+
+var max_carry := 1
 @export var jump_velocity := 4.8
 @export var ground_acceleration := 14.0
 @export var air_acceleration := 3.0
@@ -55,6 +59,7 @@ var _spring_arm: SpringArm3D
 var _camera: Camera3D
 var _body_parts: Array[MeshInstance3D] = []
 var _axe: Node3D
+var _strap: MeshInstance3D
 ## Shoulder positions for carried logs, one per log.
 var _hold_points: Array[Node3D] = []
 
@@ -72,6 +77,9 @@ func _ready() -> void:
 	_build_axe()
 	_apply_camera_mode(false)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+	Progression.upgrades_changed.connect(_apply_upgrades)
+	_apply_upgrades()
 
 
 # --- Public API used by trees, logs and the log stack ---------------------------
@@ -95,7 +103,31 @@ func pick_up(item) -> void:
 	item.set_carried(true)
 
 
-## Hands the top carried log to someone else (e.g. the log stack) without dropping it.
+func get_carried() -> Array:
+	return _carried
+
+
+func has_carried_kind(kind: String) -> bool:
+	for item in _carried:
+		if item.kind == kind:
+			return true
+	return false
+
+
+## Takes the most recently picked up item of a kind ("log" or "planks"), or null.
+func take_carried_of_kind(kind: String):
+	for i in range(_carried.size() - 1, -1, -1):
+		if _carried[i].kind == kind:
+			return _carried.pop_at(i)
+	return null
+
+
+## Lets go of a specific carried item, handing it to someone else (e.g. a supply pile).
+func release_carried(item) -> void:
+	_carried.erase(item)
+
+
+## Hands the top carried item to someone else (e.g. the log stack) without dropping it.
 func take_carried():
 	if _carried.is_empty():
 		return null
@@ -153,7 +185,7 @@ func get_save_data() -> Dictionary:
 		"yaw": rotation.y,
 		"pitch": _head.rotation.x,
 		"camera": camera_mode,
-		"carried": _carried.map(func(item): return item.counted),
+		"carried": _carried.map(func(item): return {"kind": item.kind, "counted": item.counted}),
 	}
 
 
@@ -386,6 +418,18 @@ func _build_body() -> void:
 	_body_parts.append(belt)
 
 	# Carried logs rest on the right shoulder, pointing forward.
+	# Shoulder strap upgrade: a diagonal leather strap across the chest (seen in third person).
+	var strap_mesh := BoxMesh.new()
+	strap_mesh.size = Vector3(0.09, 1.0, 0.04)
+	strap_mesh.material = HANDLE
+	_strap = MeshInstance3D.new()
+	_strap.mesh = strap_mesh
+	_strap.position = Vector3(0.0, 1.25, -0.33)
+	_strap.rotation.z = 0.7
+	_strap.visible = false
+	add_child(_strap)
+	_body_parts.append(_strap)
+
 	# Up to three logs: two side by side on the shoulder, one on top.
 	for offset in [Vector3(0.42, 1.42, -0.1), Vector3(0.82, 1.42, -0.1), Vector3(0.62, 1.77, -0.1)]:
 		var hold := Node3D.new()
@@ -413,6 +457,22 @@ func _build_camera() -> void:
 	_camera.current = true
 
 
+## Applies upgrades that change the player: carrying capacity and the axe's look.
+func _apply_upgrades() -> void:
+	max_carry = base_max_carry
+	_strap.visible = Progression.has_upgrade("shoulder_strap")
+	if _strap.visible:
+		max_carry += 1
+	# A sharpened axe gets a bigger, brighter blade.
+	var blade: MeshInstance3D = _axe.get_node("Blade")
+	if Progression.has_upgrade("sharpened_axe"):
+		blade.scale = Vector3(1.0, 1.25, 1.2)
+		blade.material_override = SHARP_METAL
+	else:
+		blade.scale = Vector3.ONE
+		blade.material_override = null
+
+
 func _build_axe() -> void:
 	_axe = Node3D.new()
 	_axe.position = Vector3(0.38, -0.36, -0.5)
@@ -431,6 +491,7 @@ func _build_axe() -> void:
 	blade_mesh.size = Vector3(0.025, 0.14, 0.2)
 	blade_mesh.material = METAL
 	var blade := MeshInstance3D.new()
+	blade.name = "Blade"
 	blade.mesh = blade_mesh
 	blade.position = Vector3(0.0, 0.45, -0.08)
 	_axe.add_child(blade)

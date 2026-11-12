@@ -6,7 +6,7 @@ const SKILL := &"forestry"
 
 const HELP_TEXT := "WASD  move     Shift  sprint     Space  jump\n" \
 	+ "Mouse  look     Left click  chop     E  pick up / take / stack / drop\n" \
-	+ "B  build mode     Tab  bird's-eye view     V  first / third person\n" \
+	+ "B  build mode     Tab  bird's-eye view     V  first / third person     K  upgrades\n" \
 	+ "Esc  pause menu     H  hide help"
 
 var _crosshair: ColorRect
@@ -31,6 +31,7 @@ func _ready() -> void:
 	Progression.points_gained.connect(_on_points_gained)
 	Progression.level_up.connect(_on_level_up)
 	Progression.state_loaded.connect(_refresh_skill)
+	Progression.upgrades_changed.connect(_refresh_skill)
 	SaveGame.saved.connect(_on_saved)
 	SaveGame.loaded.connect(_show_save_notice.bind("World loaded"))
 	_refresh_skill()
@@ -93,13 +94,18 @@ func _on_stored_changed(count: int, capacity: int) -> void:
 
 ## Total build supplies across every supply pile.
 func _refresh_supplies() -> void:
-	var total := 0
+	var wood := 0
+	var planks := 0
 	for pile in get_tree().get_nodes_in_group("supply_piles"):
 		if not pile.is_queued_for_deletion():
-			total += pile.supplies
-	if total != _shown_supplies:
-		_shown_supplies = total
-		_supplies_label.text = "Build supplies:  %d blocks" % total
+			wood += pile.supplies
+			planks += pile.planks
+	var key := wood * 100000 + planks
+	if key != _shown_supplies:
+		_shown_supplies = key
+		_supplies_label.text = "Build supplies:  %d rough log blocks" % wood
+		if planks > 0 or Progression.is_unlocked("chopping_block"):
+			_supplies_label.text += "\n                         %d plank blocks" % planks
 
 
 func _on_points_gained(skill: StringName, amount: int, _reason: String) -> void:
@@ -121,7 +127,7 @@ func _on_points_gained(skill: StringName, amount: int, _reason: String) -> void:
 
 func _on_level_up(skill: StringName, new_level: int) -> void:
 	_refresh_skill()
-	_banner.text = "%s reached level %d!" % [Progression.get_skill_name(skill), new_level]
+	_banner.text = "%s reached level %d!\nYou earned an unlock point. Press K to choose an upgrade." % [Progression.get_skill_name(skill), new_level]
 	_banner.modulate.a = 0.0
 	var tween := _banner.create_tween()
 	tween.tween_property(_banner, "modulate:a", 1.0, 0.3)
@@ -134,6 +140,9 @@ func _refresh_skill() -> void:
 	var points := Progression.get_points(SKILL)
 	var bounds := Progression.get_level_bounds(SKILL)
 	_skill_label.text = "%s   Level %d" % [Progression.get_skill_name(SKILL), level]
+	var unspent := Progression.get_unlock_points(SKILL)
+	if unspent > 0:
+		_skill_label.text += "     %d unlock point%s  [K]" % [unspent, "" if unspent == 1 else "s"]
 	if bounds.y > bounds.x:
 		_skill_bar.max_value = bounds.y - bounds.x
 		_skill_bar.value = points - bounds.x
@@ -176,7 +185,7 @@ func _build() -> void:
 	_banner.modulate = Color(1.0, 0.86, 0.5, 0.0)
 	_banner.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_banner.offset_top = 130
-	_banner.offset_bottom = 180
+	_banner.offset_bottom = 230
 	add_child(_banner)
 
 	# Skill panel, top-left.

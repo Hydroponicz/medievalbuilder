@@ -43,6 +43,7 @@ If Godot asks to upgrade or convert the project to a newer version, say yes.
 | Left click (hold) | Swing axe / chop |
 | E | Pick up log / take log from stack / stack log / add log to supplies / drop log |
 | V | Switch first ↔ third person |
+| K | Forestry upgrades |
 | B | Build mode on / off |
 | Tab | Bird's-eye view (also turns on build mode) |
 | H | Show / hide controls |
@@ -54,7 +55,7 @@ If Godot asks to upgrade or convert the project to a newer version, say yes.
 | --- | --- |
 | Left click (hold) | Place block (or supply pile) |
 | Right click (hold) | Remove block. Right click a supply pile to pack it up. |
-| 1 / 2 | Select rough log block / supply pile |
+| 1 / 2 / 3 / 4 | Rough log block / supply pile / plank block / chopping block (3 and 4 need the Chopping block upgrade) |
 | R | Cycle build shape: Single, Line, Wall, Floor |
 | Ctrl + mouse wheel | Wall height |
 
@@ -72,6 +73,18 @@ In bird's-eye view: **WASD** or **middle-mouse drag** pans, **Shift + middle-mou
    Each log becomes **10 blocks** of build supplies.
 4. Press **1** and build. Blocks within 12 m of a supply pile use its supplies.
    Removing a block puts its wood back on the pile.
+
+## Upgrades
+
+Every Forestry level gives you an **unlock point**. Press **K** to choose what to unlock, in any order.
+Then make it with wood:
+
+- **Tools** (Shoulder strap, Sharpened axe) are made at the log stack from logs in storage.
+  Stand at the log stack, press K, and click **Make**.
+- **Structures** (Chopping block) are built in build mode from a nearby supply pile.
+
+The **chopping block** splits logs into planks: put a log on it (E), swing your axe at it, and a plank
+bundle pops out. Carry it to a supply pile: one bundle = **20 plank blocks**.
 
 ## Saving
 

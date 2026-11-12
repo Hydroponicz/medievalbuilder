@@ -10,6 +10,8 @@ const RADIUS := 0.2
 const LAYER_LOGS := 4  # Physics layer 3 ("logs").
 const MASK_WORLD_AND_LOGS := 1 | 4
 
+## What kind of carried item this is (plank bundles are "planks").
+var kind := "log"
 var is_carried := false
 ## True once this log has earned its Forestry points (by being delivered to a log stack or
 ## supply pile). Logs taken back out of a stack are already counted, so moving them earns nothing.

@@ -12,12 +12,14 @@ signal status_changed(text: String)
 const BlockTypes := preload("res://scripts/building/block_types.gd")
 const VoxelWorld := preload("res://scripts/building/voxel_world.gd")
 const SUPPLY_PILE_SCENE := preload("res://scenes/supply_pile.tscn")
+const CHOPPING_BLOCK_SCENE := preload("res://scenes/chopping_block.tscn")
+const Upgrades := preload("res://scripts/progression/upgrades.gd")
 
-enum Item { ROUGH_LOG_BLOCK, SUPPLY_PILE }
+enum Item { ROUGH_LOG_BLOCK, SUPPLY_PILE, PLANK_BLOCK, CHOPPING_BLOCK }
 enum Shape { SINGLE, LINE, WALL, FLOOR }
 enum Drag { NONE, PLACE, REMOVE }
 
-const ITEM_NAMES := ["Rough log block", "Supply pile"]
+const ITEM_NAMES := ["Rough log block", "Supply pile", "Plank block", "Chopping block"]
 const SHAPE_NAMES := ["Single", "Line", "Wall", "Floor"]
 
 const BLOCK_SIZE := BlockTypes.BLOCK_SIZE
@@ -49,6 +51,7 @@ var _ghost: MeshInstance3D
 var _ghost_material: StandardMaterial3D
 var _block_ghost_mesh: BoxMesh
 var _pile_ghost_mesh: BoxMesh
+var _chopping_ghost_mesh: BoxMesh
 var _shape_ok: MultiMeshInstance3D
 var _shape_bad: MultiMeshInstance3D
 var _shape_bad_material: StandardMaterial3D
@@ -80,7 +83,9 @@ func _ready() -> void:
 	_block_ghost_mesh = BoxMesh.new()
 	_block_ghost_mesh.size = Vector3.ONE * BLOCK_SIZE * 1.02
 	_pile_ghost_mesh = BoxMesh.new()
-	_pile_ghost_mesh.size = Vector3(1.7, 0.6, 1.8)
+	_pile_ghost_mesh.size = Vector3(2.4, 0.6, 1.8)
+	_chopping_ghost_mesh = BoxMesh.new()
+	_chopping_ghost_mesh.size = Vector3(0.9, 0.9, 0.9)
 
 	_ghost = MeshInstance3D.new()
 	_ghost.mesh = _block_ghost_mesh
@@ -110,13 +115,43 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("toggle_birds_eye"):
 		set_birds_eye(not birds_eye)
 	elif active and event.is_action_pressed("hotbar_1"):
-		selected = Item.ROUGH_LOG_BLOCK
+		_select(Item.ROUGH_LOG_BLOCK)
 	elif active and event.is_action_pressed("hotbar_2"):
-		selected = Item.SUPPLY_PILE
-		_cancel_drag()
+		_select(Item.SUPPLY_PILE)
+	elif active and event.is_action_pressed("hotbar_3"):
+		_select(Item.PLANK_BLOCK)
+	elif active and event.is_action_pressed("hotbar_4"):
+		_select(Item.CHOPPING_BLOCK)
 	elif active and event.is_action_pressed("cycle_shape"):
 		shape = ((shape + 1) % SHAPE_NAMES.size()) as Shape
 		_cancel_drag()
+
+
+func _select(item: Item) -> void:
+	if _is_item_locked(item):
+		_show_notice("Unlock the Chopping block in the Forestry upgrades first [K]")
+		return
+	selected = item
+	_cancel_drag()
+
+
+## Plank blocks and the chopping block need the Chopping block upgrade.
+func _is_item_locked(item: int) -> bool:
+	if item == Item.PLANK_BLOCK or item == Item.CHOPPING_BLOCK:
+		return not Progression.is_unlocked("chopping_block")
+	return false
+
+
+func _is_block_item() -> bool:
+	return selected == Item.ROUGH_LOG_BLOCK or selected == Item.PLANK_BLOCK
+
+
+func _block_type() -> int:
+	return BlockTypes.PLANK if selected == Item.PLANK_BLOCK else BlockTypes.ROUGH_LOG
+
+
+func _chopping_block_cost() -> int:
+	return Upgrades.get_upgrade("chopping_block")["cost"]
 
 
 func set_active(on: bool) -> void:
@@ -166,7 +201,7 @@ func _process(delta: float) -> void:
 	var hit := _aim()
 	var plan := _plan_placement(hit)
 
-	if selected == Item.ROUGH_LOG_BLOCK and shape != Shape.SINGLE:
+	if _is_block_item() and shape != Shape.SINGLE:
 		_process_shape(hit, plan, place_held, remove_held)
 	else:
 		_hide_shape_preview()
@@ -199,21 +234,26 @@ func _place_single(plan: Dictionary) -> void:
 			_show_notice(plan.reason)
 		return
 
-	if plan.item == Item.SUPPLY_PILE:
-		var pile: Node3D = SUPPLY_PILE_SCENE.instantiate()
-		_world.add_child(pile)
-		pile.global_position = plan.position
-		pile.rotation.y = _facing_yaw()
-		_wait_for_release = true  # One pile per click.
+	if plan.item == Item.SUPPLY_PILE or plan.item == Item.CHOPPING_BLOCK:
+		var scene: PackedScene = SUPPLY_PILE_SCENE
+		if plan.item == Item.CHOPPING_BLOCK:
+			if not plan.pile.use_supplies(_chopping_block_cost(), BlockTypes.WOOD):
+				return
+			scene = CHOPPING_BLOCK_SCENE
+		var structure: Node3D = scene.instantiate()
+		_world.add_child(structure)
+		structure.global_position = plan.position
+		structure.rotation.y = _facing_yaw()
+		_wait_for_release = true  # One per click.
 		return
 
-	var cost := BlockTypes.get_cost(BlockTypes.ROUGH_LOG)
-	if plan.pile.use_supplies(cost):
-		_voxels.place_block(plan.cell, BlockTypes.ROUGH_LOG)
+	var type := _block_type()
+	if plan.pile.use_supplies(BlockTypes.get_cost(type), BlockTypes.get_material(type)):
+		_voxels.place_block(plan.cell, type)
 
 
 func _remove_single(hit: Dictionary) -> void:
-	if _try_dismantle_pile(hit):
+	if _try_remove_structure(hit):
 		return
 	var cell = _removal_cell(hit)
 	if cell == null:
@@ -221,14 +261,27 @@ func _remove_single(hit: Dictionary) -> void:
 	_remove_cells([cell])
 
 
-## Right-clicking a supply pile packs it up. Returns true if that happened.
-func _try_dismantle_pile(hit: Dictionary) -> bool:
+## Right-clicking a supply pile packs it up; right-clicking a chopping block takes it down
+## and returns its wood to a nearby supply pile. Returns true if a structure was handled.
+func _try_remove_structure(hit: Dictionary) -> bool:
 	if hit.is_empty():
 		return false
 	var collider = hit.collider
-	if collider != null and collider.is_in_group("supply_piles"):
+	if collider == null:
+		return false
+	if collider.is_in_group("supply_piles"):
 		collider.dismantle()
 		_wait_for_release = true
+		return true
+	if collider.is_in_group("chopping_blocks"):
+		_wait_for_release = true
+		var pile = _find_pile(collider.global_position, 0)
+		if pile == null:
+			_show_notice("Needs a supply pile nearby to take the wood back")
+			return true
+		pile.add_supplies(_chopping_block_cost(), BlockTypes.WOOD)
+		collider.release_log()
+		collider.queue_free()
 		return true
 	return false
 
@@ -245,7 +298,7 @@ func _process_shape(hit: Dictionary, plan: Dictionary, place_held: bool, remove_
 		if place_held and plan.get("has_spot", false):
 			_begin_drag(Drag.PLACE, plan.cell)
 		elif remove_held:
-			if _try_dismantle_pile(hit):
+			if _try_remove_structure(hit):
 				return
 			var cell = _removal_cell(hit)
 			if cell != null:
@@ -334,8 +387,10 @@ func _show_shape_preview(cells: Array[Vector3i]) -> void:
 	var bad: Array[Vector3i] = []
 
 	if _drag == Drag.PLACE:
-		var cost := BlockTypes.get_cost(BlockTypes.ROUGH_LOG)
-		var budget := _supplies_near(VoxelWorld.cell_center(_drag_start))
+		var type := _block_type()
+		var material := BlockTypes.get_material(type)
+		var cost := BlockTypes.get_cost(type)
+		var budget := _supplies_near(VoxelWorld.cell_center(_drag_start), material)
 		for cell in cells:
 			if _voxels.has_block(cell):
 				continue
@@ -345,7 +400,7 @@ func _show_shape_preview(cells: Array[Vector3i]) -> void:
 				ok.append(cell)
 				budget -= cost
 		_shape_bad_material.albedo_color = BAD_COLOR
-		_drag_info = "%s: %d blocks   (%d build supplies nearby)" % [SHAPE_NAMES[shape], ok.size() + bad.size(), _supplies_near(VoxelWorld.cell_center(_drag_start))]
+		_drag_info = "%s: %d blocks   (%d %s supplies nearby)" % [SHAPE_NAMES[shape], ok.size() + bad.size(), _supplies_near(VoxelWorld.cell_center(_drag_start), material), _material_word(material)]
 		if not bad.is_empty():
 			_drag_info += "   Not enough supplies for the red blocks"
 	else:
@@ -362,18 +417,20 @@ func _show_shape_preview(cells: Array[Vector3i]) -> void:
 # --- Placing and removing many blocks --------------------------------------------
 
 func _place_cells(cells: Array[Vector3i]) -> void:
-	var cost := BlockTypes.get_cost(BlockTypes.ROUGH_LOG)
+	var type := _block_type()
+	var material := BlockTypes.get_material(type)
+	var cost := BlockTypes.get_cost(type)
 	var wanted := 0
 	var placed := 0
 	for cell in cells:
 		if _voxels.has_block(cell) or _blocks_player(cell):
 			continue
 		wanted += 1
-		var pile = _find_pile(VoxelWorld.cell_center(cell), cost)
+		var pile = _find_pile(VoxelWorld.cell_center(cell), cost, material)
 		if pile == null:
 			continue
-		pile.use_supplies(cost)
-		_voxels.place_block(cell, BlockTypes.ROUGH_LOG)
+		pile.use_supplies(cost, material)
+		_voxels.place_block(cell, type)
 		placed += 1
 	if placed < wanted:
 		_show_notice("Placed %d of %d blocks. Not enough build supplies nearby" % [placed, wanted])
@@ -390,7 +447,7 @@ func _remove_cells(cells: Array) -> void:
 			stuck += 1
 			continue
 		var type: int = _voxels.remove_block(cell)
-		pile.add_supplies(BlockTypes.get_cost(type))
+		pile.add_supplies(BlockTypes.get_cost(type), BlockTypes.get_material(type))
 	if stuck > 0:
 		_show_notice("Needs a supply pile nearby to take the wood back")
 
@@ -423,16 +480,24 @@ func _plan_placement(hit: Dictionary) -> Dictionary:
 	var normal: Vector3 = hit.normal
 	var point: Vector3 = hit.position
 
-	if selected == Item.SUPPLY_PILE:
-		var pile_plan := {"has_spot": true, "item": Item.SUPPLY_PILE, "position": point, "valid": true, "reason": ""}
+	if selected == Item.SUPPLY_PILE or selected == Item.CHOPPING_BLOCK:
+		var structure_plan := {"has_spot": true, "item": selected, "position": point, "valid": true, "reason": ""}
 		if normal.y < 0.75:
-			pile_plan.valid = false
-			pile_plan.reason = "Supply piles need flat ground"
-		return pile_plan
+			structure_plan.valid = false
+			structure_plan.reason = "Needs flat ground"
+		elif selected == Item.CHOPPING_BLOCK:
+			var block_cost := _chopping_block_cost()
+			structure_plan.pile = _find_pile(point, block_cost, BlockTypes.WOOD)
+			if structure_plan.pile == null:
+				structure_plan.valid = false
+				structure_plan.reason = "A chopping block needs %d wood supplies (1 log) at a supply pile nearby" % block_cost
+		return structure_plan
 
+	var type := _block_type()
+	var material := BlockTypes.get_material(type)
 	var cell: Vector3i = VoxelWorld.world_to_cell(point + normal * (BLOCK_SIZE * 0.5))
-	var plan := {"has_spot": true, "item": Item.ROUGH_LOG_BLOCK, "cell": cell, "valid": true, "reason": ""}
-	var cost := BlockTypes.get_cost(BlockTypes.ROUGH_LOG)
+	var plan := {"has_spot": true, "item": selected, "cell": cell, "valid": true, "reason": ""}
+	var cost := BlockTypes.get_cost(type)
 	var center: Vector3 = VoxelWorld.cell_center(cell)
 
 	if _voxels.has_block(cell):
@@ -441,12 +506,14 @@ func _plan_placement(hit: Dictionary) -> Dictionary:
 		plan.valid = false
 		plan.reason = "You're standing in the way"
 	else:
-		var pile = _find_pile(center, cost)
+		var pile = _find_pile(center, cost, material)
 		plan.pile = pile
 		if pile == null:
 			plan.valid = false
 			if _find_pile(center, 0) == null:
 				plan.reason = "No build supplies nearby. Place a supply pile [2] and bring logs to it"
+			elif material == BlockTypes.PLANKS:
+				plan.reason = "No planks here. Split logs on a chopping block and carry the planks to the supply pile"
 			else:
 				plan.reason = "Out of build supplies. Carry more logs to the supply pile"
 	return plan
@@ -468,12 +535,12 @@ func _blocks_player(cell: Vector3i) -> bool:
 	return VoxelWorld.cell_aabb(cell).intersects(_player.get_body_aabb())
 
 
-## Nearest supply pile in range of a point that has at least `need` supplies.
-func _find_pile(point: Vector3, need: int):
+## Nearest supply pile in range of a point that has at least `need` of a material.
+func _find_pile(point: Vector3, need: int, material := BlockTypes.WOOD):
 	var best = null
 	var best_distance := INF
 	for pile in get_tree().get_nodes_in_group("supply_piles"):
-		if pile.is_queued_for_deletion() or not pile.is_in_range(point) or pile.supplies < need:
+		if pile.is_queued_for_deletion() or not pile.is_in_range(point) or pile.get_amount(material) < need:
 			continue
 		var distance: float = pile.global_position.distance_to(point)
 		if distance < best_distance:
@@ -482,13 +549,17 @@ func _find_pile(point: Vector3, need: int):
 	return best
 
 
-## Total supplies of every pile in range of a point.
-func _supplies_near(point: Vector3) -> int:
+## Total supplies of a material across every pile in range of a point.
+func _supplies_near(point: Vector3, material := BlockTypes.WOOD) -> int:
 	var total := 0
 	for pile in get_tree().get_nodes_in_group("supply_piles"):
 		if not pile.is_queued_for_deletion() and pile.is_in_range(point):
-			total += pile.supplies
+			total += pile.get_amount(material)
 	return total
+
+
+func _material_word(material: String) -> String:
+	return "plank" if material == BlockTypes.PLANKS else "wood"
 
 
 func _facing_yaw() -> float:
@@ -540,10 +611,12 @@ func _update_ghost(plan: Dictionary) -> void:
 		return
 	_ghost.visible = true
 	_ghost_material.albedo_color = OK_COLOR if plan.valid else BAD_COLOR
-	if plan.item == Item.SUPPLY_PILE:
-		_ghost.mesh = _pile_ghost_mesh
-		_ghost.global_position = plan.position + Vector3.UP * 0.3
+	if plan.item == Item.SUPPLY_PILE or plan.item == Item.CHOPPING_BLOCK:
+		var is_pile: bool = plan.item == Item.SUPPLY_PILE
+		_ghost.mesh = _pile_ghost_mesh if is_pile else _chopping_ghost_mesh
 		_ghost.global_rotation = Vector3(0.0, _facing_yaw(), 0.0)
+		var offset := Vector3(0.3, 0.3, 0.0) if is_pile else Vector3(0.0, 0.45, 0.0)
+		_ghost.global_position = plan.position + _ghost.global_transform.basis * offset
 	else:
 		_ghost.mesh = _block_ghost_mesh
 		_ghost.global_position = VoxelWorld.cell_center(plan.cell)
@@ -561,11 +634,13 @@ func _build_status_text(plan: Dictionary) -> String:
 	var items := ""
 	for i in ITEM_NAMES.size():
 		var label := "%d  %s" % [i + 1, ITEM_NAMES[i]]
+		if _is_item_locked(i):
+			label += " (locked)"
 		items += ("[ %s ]" % label) if i == selected else ("  %s  " % label)
 		items += "     "
 
 	var shape_line := ""
-	if selected == Item.ROUGH_LOG_BLOCK:
+	if _is_block_item():
 		shape_line = "R  Shape: %s" % SHAPE_NAMES[shape]
 		if shape == Shape.WALL:
 			shape_line += "     Wall height: %d blocks (Ctrl + wheel)" % wall_height
@@ -575,14 +650,17 @@ func _build_status_text(plan: Dictionary) -> String:
 		info = _notice
 	elif _drag_info != "":
 		info = _drag_info
-	elif plan.get("has_spot", false) and plan.item == Item.ROUGH_LOG_BLOCK:
+	elif plan.get("has_spot", false) and _is_block_item():
 		if plan.has("pile") and plan.pile != null:
-			info = "Build supplies here: %d blocks" % _supplies_near(VoxelWorld.cell_center(plan.cell))
+			var material := BlockTypes.get_material(_block_type())
+			info = "%s supplies here: %d blocks" % [_material_word(material).capitalize(), _supplies_near(VoxelWorld.cell_center(plan.cell), material)]
 		elif plan.reason != "":
 			info = plan.reason
+	elif plan.get("has_spot", false) and plan.reason != "":
+		info = plan.reason
 
 	var controls := "Left click  place     Right click  remove     Tab  bird's-eye     B  exit"
-	if selected == Item.ROUGH_LOG_BLOCK and shape != Shape.SINGLE:
+	if _is_block_item() and shape != Shape.SINGLE:
 		controls = "Drag with left click to build, right click to remove     Tab  bird's-eye     B  exit"
 	if birds_eye:
 		controls += "\nWASD or middle-drag  pan     Shift + middle-drag  rotate / tilt     Q / E  rotate     Wheel  zoom"
